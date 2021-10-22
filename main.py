@@ -27,9 +27,7 @@ KZOrdersCalc = {}
 extOrders = {}
 extOrdersCalc = {}
 
-#TODO: return!
-#edvBook = xlrd.open_workbook("C:/Users/Fabian Reder/Documents/A_Firma/quarzsande3/Input/EDV_Abrechnung.xls")
-edvBook = xlrd.open_workbook("//hcmserver/Daten/Reder/DispoEF/Reder/Daten_Sand/Fabian_QS_Programm/EDV_Abrechnung.xls")
+edvBook = {}
 
 dz = 0.99
 
@@ -43,22 +41,32 @@ extNotCalculated = 0
 header = [""]*14
 minus = 0
 
-#TODO: return!
-saveintern = "//hcmserver/Daten/Reder/DispoEF/Reder/Daten_Sand/Frächterabrechnung/"
-#saveintern = "C:/Users/Fabian Reder/Documents/A_Firma/quarzsande3/Output_KFZ/"
+edvbookPath = ""
+saveintern = ""
+abrFilePath = ""
+savespotPath = ""
+extbookPath = ""
+
 date = ""
 
 allowedZones = []
 
 def main():
+
+    global edvBook
+    global edvbookPath
+    global abrFilePath
+
+    loadConfig()
+
+    edvBook = xlrd.open_workbook(edvbookPath)
+
     Tk().withdraw()
 
     print(Fore.CYAN + Style.BRIGHT + "Drücken Sie Enter, um die Fahrten-Datei auszuwählen")
     input()
 
-    #TODO: return!
-    #abrFile = askopenfilename(initialdir="C:/Users/Fabian Reder/Documents/A_Firma/quarzsande3/Input")
-    abrFile = askopenfilename(initialdir="//hcmserver/Daten/Reder/DispoEF/Reder/Daten_Sand/Fahrtenlisten")
+    abrFile = askopenfilename(initialdir=abrFilePath)
     abrBook = xlrd.open_workbook(abrFile)
     abrSheet = abrBook.sheet_by_index(0)
 
@@ -66,7 +74,7 @@ def main():
     readTZ()
     createFolders()
 
-    #Inital Einlesen der Auftragsdatei
+    #Einlesen der Auftragsdatei
     print(Fore.GREEN + "Lese Fahrten...")
     readAbrSheet(abrSheet)
     time.sleep(0.5)
@@ -74,6 +82,11 @@ def main():
     print(Fore.GREEN + "Lade Preise...")
     getZonePreise()
     getStundenPreise()
+    time.sleep(0.5)
+
+    #Einlesen der Frächteraufstellung
+    print(Fore.GREEN + "Lese Subfrächterkennzeichen...")
+    extractSubLicensePLates()
     time.sleep(0.5)
 
     #Handle interne Sachen
@@ -90,9 +103,6 @@ def main():
     time.sleep(0.5)
 
     #Handle externe Sachen
-    print(Fore.GREEN + "Lese Subfrächterkennzeichen...")
-    extractSubLicensePLates()
-    time.sleep(0.5)
     print(Fore.GREEN + "Extrahiere Subfrächterfahrten...")
     extractSubFahrten()
     time.sleep(0.5)
@@ -166,6 +176,9 @@ def consoleOut():
     print(Style.BRIGHT + "\nSumme aller Minus-Fahrten: ", Style.BRIGHT + Fore.RED + str(round(minus, 2)))
 
 def minusOut():
+
+    global savespotPath
+
     minusBook = openpyxl.Workbook()
     minusSheet = minusBook.active
 
@@ -220,8 +233,7 @@ def minusOut():
     input()
 
     #TODO; return!
-    saveSpot = asksaveasfilename(initialdir="//hcmserver/Daten/Reder/DispoEF/Reder/Daten_Sand/Frächterabrechnung", defaultextension=".xlsx", initialfile="Minusfahrten_"+date)
-    #saveSpot = asksaveasfilename(initialdir="C:/Users/Fabian Reder/Documents/A_Firma/quarzsande3/Output", defaultextension=".xlsx", initialfile="Minusfahrten_"+date)
+    saveSpot = asksaveasfilename(initialdir=savespotPath, defaultextension=".xlsx", initialfile="Minusfahrten_"+date)
 
     minusBook.save(saveSpot)
 
@@ -326,9 +338,10 @@ def extractLicensePlates(orPlate, i):
     return platesFound;
 
 def extractSubLicensePLates():
-    #TODO: return!
-    #extBook = xlrd.open_workbook("C:/Users/Fabian Reder/Documents/A_Firma/quarzsande3/Input/Frächteraufstellung.xls")
-    extBook = xlrd.open_workbook("//hcmserver/Daten/Reder/DispoEF/Reder/Frächteraufstellung.xls")
+
+    global extbookPath
+
+    extBook = xlrd.open_workbook(extbookPath)
     extSheet = extBook.sheet_by_index(0)
 
     notpattern = re.compile('[a-z]')
@@ -351,7 +364,7 @@ def extractSubLicensePLates():
                 if nono is None:
                     yesyes = findpattern.search(part)
                     if yesyes is not None and len(part) < 10:
-                        if part not in extKZ:
+                        if part not in extKZ and curName != "Reder":
                             extKZ.append(part)
                         if part not in extKZZuordnung:
                             extKZZuordnung[part] = curName
@@ -604,6 +617,7 @@ def calculateSubcontractors():
 
 def printKFZ(orders, extern):
 
+
     if extern:
         DZ = dz+0.02
     else:
@@ -620,7 +634,8 @@ def printKFZ(orders, extern):
             else:
                 outSheet.cell(1, 2).value = 'Erlösblatt'
 
-            outSheet.cell(1, 4).value = extKZZuordnung[kz]
+            if kz in extKZZuordnung:
+                outSheet.cell(1, 4).value = extKZZuordnung[kz]
 
             outSheet.cell(3, 1).value = 'Gerät'
             outSheet.cell(3, 2).value = 'LFS-Datum'
@@ -685,13 +700,9 @@ def printKFZ(orders, extern):
             styleSheet(outSheet)
 
             #Speichern
-            #TODO: interne externe wo anders abspeichern - wos hob i damit gmand??
-            #TODO: return check release
             if extern:
-                #outBook.save(saveintern + "Subfrächter_" + date + "/" + kz + '.xlsx')
                 outBook.save(saveintern + "Subfrächter_" + date + "/" + kz + '.xlsx')
             else:
-                #outBook.save(saveintern + date + "/" + kz + '.xlsx')
                 outBook.save(saveintern + date + "/" + kz + '_i.xlsx')
         except:
             print("Fatal-Error - printKFZ() - KZ: " + kz)
@@ -794,5 +805,42 @@ def readExcemptionos():
                     thisRule['trigger'].append([trigger, value])
 
             Excemptions[type].append(thisRule)
+
+def loadConfig():
+    global recipients
+    global inFolder
+    global outFolder
+    global errFolder
+    global backupFolder
+    global AgMappingPath
+    global TourMappingPath
+    global sourcePath
+
+    global edvbookPath
+    global saveintern
+    global abrFilePath
+    global savespotPath
+    global extbookPath
+
+    with open('config.csv', 'r') as f:
+        lines = f.readlines()
+        print(lines)
+        for x in range(len(lines)):
+            lineElems = lines[x].split(';')
+
+            if x == 0:
+                edvbookPath = lineElems[1]
+
+            if x == 1:
+                saveintern = lineElems[1]
+
+            if x == 2:
+                abrFilePath = lineElems[1]
+
+            if x == 3:
+                savespotPath = lineElems[1]
+
+            if x == 4:
+                extbookPath = lineElems[1]
 
 main()
